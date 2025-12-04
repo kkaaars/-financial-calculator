@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Финансовый Калькулятор (Шаг 2)</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #f0f2f5;
+            margin: 0;
+        }
+        .calculator-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 480px;
+            display: flex;
+            flex-direction: column;
+        }
+        .app-title {
+            text-align: center;
+            margin-top: 0;
+            margin-bottom: 20px;
+            color: #333;
+            font-size: 24px;
+        }
+        .input-group {
+            margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+        label { 
+            margin-bottom: 5px; 
+            font-weight: 600; 
+            color: #444;
+        }
+        input, select {
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            outline: none;
+        }
+        input:focus, select:focus {
+            border-color: #007bff;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 10px;
+        }
+        button:hover { background-color: #0056b3; }
+        
+        .result-box {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e9ecef;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #333;
+            word-wrap: break-word;
+            min-height: 1.5em;
+        }
+        .error { 
+            color: #dc3545; 
+            font-size: 0.8em;
+        }
+
+        .student-info {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+            color: #888;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+
+<div class="calculator-card">
+    <h2 class="app-title">Финансовый Калькулятор</h2>
+
+    <div class="input-group">
+        <label for="num1">Первое число:</label>
+        <input type="text" id="num1" placeholder="0.00">
+    </div>
+
+    <div class="input-group">
+        <label for="operation">Операция:</label>
+        <select id="operation">
+            <option value="add">Сложение (+)</option>
+            <option value="subtract">Вычитание (-)</option>
+            <option value="multiply">Умножение (*)</option>
+            <option value="divide">Деление (/)</option>
+        </select>
+    </div>
+
+    <div class="input-group">
+        <label for="num2">Второе число:</label>
+        <input type="text" id="num2" placeholder="0.00">
+    </div>
+
+    <button onclick="calculate()">Вычислить</button>
+
+    <div id="result" class="result-box"></div>
+
+    <div class="student-info">
+        Выполнил: Холюсев Вадим Витальевич<br>
+        Курс: 4, Группа: 4, Год: 2025
+    </div>
+</div>
+
+<script>
+
+    const DECIMALS = 6;
+    const SCALAR = 1000000n;
+    const MAX_LIMIT = 1000000000000n * SCALAR; 
+
+    function calculate() {
+        const num1Str = document.getElementById('num1').value;
+        const num2Str = document.getElementById('num2').value;
+        const op = document.getElementById('operation').value;
+        const resultDiv = document.getElementById('result');
+
+        resultDiv.innerHTML = "";
+
+        try {
+            validateInputFormat(num1Str);
+            validateInputFormat(num2Str);
+
+  
+            const val1 = parseToBigInt(num1Str);
+            const val2 = parseToBigInt(num2Str);
+            let resBigInt;
+
+
+            switch (op) {
+                case 'add':
+                    resBigInt = val1 + val2;
+                    break;
+                case 'subtract':
+                    resBigInt = val1 - val2;
+                    break;
+                case 'multiply':
+
+                    resBigInt = (val1 * val2) / SCALAR;
+                    break;
+                case 'divide':
+                    
+                    if (val2 === 0n) {
+                        throw new Error("Деление на ноль невозможно");
+                    }
+                    
+                    resBigInt = divideWithRounding(val1, val2);
+                    break;
+            }
+
+            
+            if (resBigInt > MAX_LIMIT || resBigInt < -MAX_LIMIT) {
+                resultDiv.innerHTML = "<span class='error'>Ошибка: Переполнение (выход за пределы ±1 трлн)</span>";
+                return;
+            }
+
+            
+            const resultStr = formatResult(resBigInt);
+            resultDiv.innerText = resultStr;
+
+        } catch (e) {
+            resultDiv.innerHTML = "<span class='error'>" + e.message + "</span>";
+        }
+    }
+
+    
+    function validateInputFormat(input) {
+        if (!input) return;
+        
+        // Регулярное выражение:
+        // ^-?           - Начало строки, опциональный минус
+        // (
+        //   \d+         - Либо просто цифры без пробелов (1000)
+        //   |           - ИЛИ
+        //   \d{1,3}     - от 1 до 3 цифр
+        //   ( \d{3})*   - затем группы (пробел + 3 цифры) повторяются 0 и более раз
+        // )
+        // ([.,]\d+)?$   - Опционально точка/запятая и цифры в конце
+        
+        const strictRegex = /^-?(\d+|(\d{1,3}( \d{3})*))([.,]\d+)?$/;
+
+        if (!strictRegex.test(input)) {
+            
+            if (/[^0-9\s.,-]/.test(input)) {
+                throw new Error("Введены недопустимые символы (буквы и т.д.)");
+            }
+            if (input.includes('  ')) {
+                throw new Error("Два пробела подряд недопустимы");
+            }
+            if (input.includes('-') && input.indexOf('-') > 0) {
+                 throw new Error("Минус может быть только в начале");
+            }
+            throw new Error("Некорректный формат числа (проверьте пробелы)");
+        }
+    }
+
+    function parseToBigInt(input) {
+
+        if (!input) return 0n;
+        let clean = input.replace(/\s/g, '').replace(',', '.');
+        
+        let [intPart, fracPart] = clean.split('.');
+        if (!intPart) intPart = "0";
+        if (!fracPart) fracPart = "";
+
+        
+        let isNeg = false;
+        if (intPart.startsWith('-')) {
+            isNeg = true;
+            intPart = intPart.substring(1);
+        } else if (intPart === "0" && clean.startsWith('-')) {
+             isNeg = true;
+        }
+        if (intPart === "") intPart = "0";
+
+        
+        fracPart = fracPart.padEnd(DECIMALS, '0').substring(0, DECIMALS);
+
+        let combined = intPart + fracPart;
+        let val = BigInt(combined);
+        return isNeg ? -val : val;
+    }
+
+    
+    function divideWithRounding(numerator, denominator) {
+        
+        
+        const precisionBuffer = numerator * SCALAR * 10n;
+        const quotient = precisionBuffer / denominator;
+        
+        
+        const remainder = quotient % 10n;
+        let result = quotient / 10n;
+
+        
+        if (remainder >= 5n) {
+            result += 1n;
+        } else if (remainder <= -5n) {
+            result -= 1n;
+        }
+        
+        return result;
+    }
+
+    
+    function formatResult(value) {
+        const isNeg = value < 0n;
+        let str = (isNeg ? -value : value).toString();
+
+        
+        while (str.length <= DECIMALS) str = '0' + str;
+
+        const splitIdx = str.length - DECIMALS;
+        let intPart = str.substring(0, splitIdx);
+        let fracPart = str.substring(splitIdx);
+
+        
+        intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+
+        
+        fracPart = fracPart.replace(/0+$/, '');
+
+        let resultString = (isNeg ? '-' : '') + intPart;
+
+        
+        if (fracPart.length > 0) {
+            resultString += "." + fracPart;
+        } 
+               
+
+        return resultString;
+    }
+</script>
+
+</body>
+</html>
